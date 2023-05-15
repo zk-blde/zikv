@@ -70,13 +70,16 @@ func (s *Arena) putNode(height int) uint32 {
 
 //fixme-:
 func (s *Arena) allocate(sz uint32) uint32 {
+	// 这里使用原子操作, 在已经占用的内存的数值上 + 要分配大小
 	offset := atomic.AddUint32(&s.n, sz)
 	if !s.shouldGrow {
 		AssertTrue(int(offset) <= len(s.buf))
 		return offset - sz
 	}
 
+	// 要分配的内存空间, 已经不足以放下下一个新的节点
 	if int(offset) > len(s.buf)-MaxNodeSize {
+		//把arena的空间double一下
 		growBy := uint32(len(s.buf))
 		if growBy > 1<<30 {
 			growBy = 1 << 30
@@ -85,7 +88,9 @@ func (s *Arena) allocate(sz uint32) uint32 {
 			growBy = sz
 		}
 		newBuf := make([]byte, len(s.buf)+int(growBy))
+		//这里的操作是RCU, 全量Copy到新的Buf中,然后设置为新的Arena内存值
 		AssertTrue(len(s.buf) == copy(newBuf, s.buf))
+		//这里进行新的赋值
 		s.buf = newBuf
 		// fmt.Print(len(s.buf), " ")
 	}
